@@ -8,23 +8,7 @@ app.use(express.static("dist"));
 app.use(express.json());
 app.use(cors());
 
-// let notes = [
-//   {
-//     id: 1,
-//     content: "HTML is easy",
-//     important: true,
-//   },
-//   {
-//     id: 2,
-//     content: "Browser can execute only JavaScript",
-//     important: false,
-//   },
-//   {
-//     id: 3,
-//     content: "GET and POST are the most important methods of HTTP protocol",
-//     important: true,
-//   },
-// ];
+
 const unknownEndpoint = (req, res, next) => {
   res.status(404).send({ error: 'Unknown endpoint' });
 }
@@ -34,6 +18,8 @@ const errorHandler = (err, req, res, next) => {
 
   if (err.name === 'CastError') {
     return res.status(400).send({ error: 'malformed id' });
+  } else if (err.name === 'ValidationError') {
+    return res.status(400).json({ error: err.message });
   }
   next(error);
 }
@@ -58,11 +44,6 @@ app.get("/api/notes/:id", (req, res, next) => {
   }).catch(err => next(err));
 });
 
-const generateId = () => {
-  const maxId = notes.length > 0 ? Math.max(...notes.map((n) => n.id)) : 0;
-  return maxId + 1;
-};
-
 app.post("/api/notes", (req, res, next) => {
   const body = req.body;
   if (!body.content) {
@@ -76,7 +57,7 @@ app.post("/api/notes", (req, res, next) => {
   });
   note.save().then(savedNote => {
     res.json(savedNote);
-  });
+  }).catch(err => next(err));
 });
 
 app.put('/api/notes/:id', (req, res, next) => {
@@ -87,7 +68,7 @@ app.put('/api/notes/:id', (req, res, next) => {
     important: body.important
   };
 
-  Note.findByIdAndUpdate(req.params.id, note, { new: true }).then(updatedNote => {
+  Note.findByIdAndUpdate(req.params.id, note, { new: true, runValidators: true, context: 'query' }).then(updatedNote => {
     res.json(updatedNote);
   }).catch(err => next(err));
 });
