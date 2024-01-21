@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@flydotio/dockerfile": "^0.4.11",
+    "eslint": "^8.56.0",
     "nodemon": "^3.0.1"
   }
 }
