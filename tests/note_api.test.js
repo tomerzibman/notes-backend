@@ -2,14 +2,26 @@ const mongoose = require('mongoose');
 const supertest = require('supertest');
 const app = require('../app');
 const Note = require('../models/note');
+const User = require('../models/user');
 const helper = require('./test_helper');
+const bcrypt = require('bcrypt');
 
 const api = supertest(app);
+let user;
 
 beforeEach(async () => {
+  await User.deleteMany({});
+
+  const passwordHash = await bcrypt.hash('password123', 10);
+  user = new User({ username: 'root', passwordHash: passwordHash });
+  await user.save();
+
   await Note.deleteMany({});
 
-  const noteObjects = helper.initialNotes.map((note) => new Note(note));
+  const noteObjects = helper.initialNotes.map((note) => {
+    note.userId = user._id.toString();
+    return new Note(note);
+  });
   const promiseArray = noteObjects.map((note) => note.save());
   await Promise.all(promiseArray);
 });
@@ -64,6 +76,7 @@ describe('addition of a new note', () => {
     const newNote = {
       content: 'async/await simplifies making notes',
       important: true,
+      userId: user._id.toString(),
     };
 
     await api
@@ -82,6 +95,7 @@ describe('addition of a new note', () => {
   test('fails with statuscode 400 if data is invalid', async () => {
     const invalidNote = {
       important: true,
+      userId: user._id.toString(),
     };
 
     await api.post('/api/notes').send(invalidNote).expect(400);
