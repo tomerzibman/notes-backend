@@ -5,9 +5,11 @@ const Note = require('../models/note');
 const User = require('../models/user');
 const helper = require('./test_helper');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 const api = supertest(app);
 let user;
+let token;
 
 beforeEach(async () => {
   await User.deleteMany({});
@@ -15,6 +17,14 @@ beforeEach(async () => {
   const passwordHash = await bcrypt.hash('password123', 10);
   user = new User({ username: 'root', passwordHash: passwordHash });
   await user.save();
+  const userForToken = {
+    username: user.username,
+    id: user._id,
+  };
+  token = jwt.sign(userForToken, process.env.SECRET, {
+    expiresIn: 60 * 60,
+  });
+  token = `Bearer ${token}`;
 
   await Note.deleteMany({});
 
@@ -72,7 +82,7 @@ describe('viewing a spesific note', () => {
 });
 
 describe('addition of a new note', () => {
-  test('succeeds with valid data', async () => {
+  test('succeeds with valid data and valid token', async () => {
     const newNote = {
       content: 'async/await simplifies making notes',
       important: true,
@@ -82,6 +92,7 @@ describe('addition of a new note', () => {
     await api
       .post('/api/notes')
       .send(newNote)
+      .set({ Authorization: token })
       .expect(201)
       .expect('Content-Type', /application\/json/);
 
@@ -92,13 +103,17 @@ describe('addition of a new note', () => {
     expect(contents).toContain('async/await simplifies making notes');
   });
 
-  test('fails with statuscode 400 if data is invalid', async () => {
+  test('fails with statuscode 400 if data is invalid and token is valid', async () => {
     const invalidNote = {
       important: true,
       userId: user._id.toString(),
     };
 
-    await api.post('/api/notes').send(invalidNote).expect(400);
+    await api
+      .post('/api/notes')
+      .send(invalidNote)
+      .set({ Authorization: token })
+      .expect(400);
 
     const notesAtEnd = await helper.notesInDb();
 
@@ -118,6 +133,20 @@ describe('deletion of a note', () => {
 
     const contents = notesAtEnd.map((n) => n.content);
     expect(contents).not.toContain(noteToDelete.content);
+  });
+
+  test('fails with statuscode 404 if id is invalid', async () => {
+    const notesAtStart = await helper.notesInDb();
+    const noteToDelete = notesAtStart[0];
+    const invalidId = await helper.nonExisitingId();
+
+    await api.delete(`/api/notes/${invalidId}`).expect(404);
+
+    const notesAtEnd = await helper.notesInDb();
+    expect(notesAtEnd).toHaveLength(notesAtStart.length);
+
+    const contents = notesAtEnd.map((n) => n.content);
+    expect(contents).toContain(noteToDelete.content);
   });
 });
 
